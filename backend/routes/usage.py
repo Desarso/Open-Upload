@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select, func
 from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import case, and_, BigInteger
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
 
 from database import get_db
 from models import User, Project, ApiKey, ApiUsage, ApiUsageRead, ApiUsageStats, File
 from auth import get_current_db_user, get_api_key_user
+from helpers.Firebase_helpers import role_based_access
 
 # Dashboard stats response model
 class DashboardStats(BaseModel):
@@ -20,20 +20,25 @@ class DashboardStats(BaseModel):
 
 # Create routers
 router = APIRouter(prefix="/usage", include_in_schema=False)
+router.dependencies.append(Depends(role_based_access(["whitelisted"])))
+
 router_frontend = APIRouter(prefix="/frontend/usage", include_in_schema=False)
+router_frontend.dependencies.append(Depends(role_based_access(["whitelisted"])))
 
 @router.get("/dashboard-stats", response_model=DashboardStats)
 async def get_dashboard_stats(
+    request: Request,
     session: Session = Depends(get_db),
-    current_user: User = Depends(get_current_db_user),
 ):
     """Get aggregated stats for the dashboard."""
+    current_user = request.state.user
+    
     # Calculate storage stats
     storage_result = session.query(
         func.coalesce(func.sum(File.size), 0).cast(BigInteger).label('total_storage'),
         func.count(File.id).label('total_files')
     ).filter(
-        File.user_firebase_uid == current_user.firebase_uid
+        File.user_firebase_uid == current_user.uid
     ).first()
     
     # Calculate API requests for last 30 days
@@ -45,7 +50,7 @@ async def get_dashboard_stats(
     current_requests = session.query(
         func.count(ApiUsage.id)
     ).filter(
-        ApiUsage.user_firebase_uid == current_user.firebase_uid,
+        ApiUsage.user_firebase_uid == current_user.uid,
         ApiUsage.timestamp >= start_date,
         ApiUsage.timestamp <= end_date
     ).scalar() or 0
@@ -54,7 +59,7 @@ async def get_dashboard_stats(
     previous_requests = session.query(
         func.count(ApiUsage.id)
     ).filter(
-        ApiUsage.user_firebase_uid == current_user.firebase_uid,
+            ApiUsage.user_firebase_uid == current_user.uid,
         ApiUsage.timestamp >= previous_start,
         ApiUsage.timestamp < start_date
     ).scalar() or 0
@@ -80,15 +85,17 @@ async def get_dashboard_stats(
 
 @router.get("/", response_model=List[ApiUsageStats])
 async def get_usage_stats(
+    request: Request,
     session: Session = Depends(get_db),
-    current_user: User = Depends(get_current_db_user),
     project_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ):
     """Get usage statistics aggregated by day."""
+    current_user = request.state.user
+    
     # Base query filters
-    filters = [ApiUsage.user_firebase_uid == current_user.firebase_uid]
+    filters = [ApiUsage.user_firebase_uid == current_user.uid]
     
     # Add project filter if specified
     if project_id is not None:
@@ -131,8 +138,8 @@ async def get_usage_stats(
 
 @router.get("/details", response_model=List[ApiUsageRead])
 async def get_usage_details(
+    request: Request,
     session: Session = Depends(get_db),
-    current_user: User = Depends(get_current_db_user),
     project_id: Optional[int] = None,
     api_key_id: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -141,7 +148,9 @@ async def get_usage_details(
     limit: int = 100
 ):
     """Get detailed usage records with optional filtering."""
-    statement = select(ApiUsage).where(ApiUsage.user_firebase_uid == current_user.firebase_uid)
+    current_user = request.state.user
+    
+    statement = select(ApiUsage).where(ApiUsage.user_firebase_uid == current_user.uid)
     
     if project_id is not None:
         statement = statement.where(ApiUsage.project_id == project_id)
@@ -162,6 +171,7 @@ async def get_usage_details(
 
 @router_frontend.get("/api/stats", response_model=ApiUsageStats)
 async def get_api_key_stats(
+    request: Request,
     user_project_key: tuple[User, Project, ApiKey] = Depends(get_api_key_user),
     session: Session = Depends(get_db),
     days: Optional[int] = 30

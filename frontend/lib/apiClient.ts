@@ -47,6 +47,23 @@ export interface ProjectWithKeys extends Project {
     api_keys: ApiKey[];
 }
 
+export interface ApiUsageRead {
+  id: number;
+  timestamp: string;
+  endpoint: string;
+  response_time: number;
+  status_code: number;
+  user_firebase_uid: string;
+  project_id: number;
+  api_key_id: number;
+}
+
+export interface UsageDetailsResponse {
+  items: ApiUsageRead[];
+  has_more: boolean;
+  next_cursor?: string;
+}
+
 // Helper function to handle fetch requests
 async function fetchApi(
   endpoint: string,
@@ -229,5 +246,28 @@ export const getUsageStats = (
   if (params.project_id) queryParams.append('project_id', params.project_id.toString());
   
   const endpoint = `/usage/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  return fetchApi(endpoint, token, { method: 'GET' });
+};
+
+export const getUsageDetails = (
+  token: string,
+  params: {
+    start_date?: string;
+    end_date?: string;
+    project_id?: number;
+    api_key_id?: number;
+    cursor?: string;
+    limit?: number;
+  } = {}
+): Promise<UsageDetailsResponse> => {
+  const queryParams = new URLSearchParams();
+  if (params.start_date) queryParams.append('start_date', params.start_date);
+  if (params.end_date) queryParams.append('end_date', params.end_date);
+  if (params.project_id) queryParams.append('project_id', params.project_id.toString());
+  if (params.api_key_id) queryParams.append('api_key_id', params.api_key_id.toString());
+  if (params.cursor) queryParams.append('cursor', params.cursor);
+  if (params.limit) queryParams.append('limit', params.limit.toString());
+  
+  const endpoint = `/usage/details${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
   return fetchApi(endpoint, token, { method: 'GET' });
 };

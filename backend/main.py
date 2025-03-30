@@ -7,10 +7,10 @@ from firebase_admin import credentials
 
 # Local imports
 from firebase.firebase_credentials import get_firebase_credentials
-from database import create_db_and_tables, get_db
+from database import create_db_and_tables
 from models import User, UserRead
 from auth import get_current_db_user
-from routes.projects import router as projects_router, router_frontend as projects_frontend_router
+from routes.projects import router as projects_router
 from routes.api_keys import router as api_keys_router, router_frontend as api_keys_frontend_router
 from routes.usage import router as usage_router, router_frontend as usage_frontend_router
 from routes.files import router as files_router, router_frontend as files_frontend_router, router_public as files_public_router
@@ -58,6 +58,7 @@ app.add_middleware(
 
 # Include base routes (hidden from docs)
 app.include_router(projects_router)
+
 app.include_router(api_keys_router)
 app.include_router(usage_router)
 
@@ -68,7 +69,6 @@ app.include_router(files_router)
 app.include_router(files_public_router)
 
 # Include frontend routes (hidden from docs)
-app.include_router(projects_frontend_router)
 app.include_router(api_keys_frontend_router)
 app.include_router(usage_frontend_router)
 app.include_router(files_frontend_router)
