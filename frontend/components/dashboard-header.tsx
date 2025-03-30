@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/AuthContext"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { signOut, auth } from "@/lib/firebase"
 
 export function DashboardHeader() {
   const router = useRouter()
@@ -30,9 +31,13 @@ export function DashboardHeader() {
       .slice(0, 2)
   }
 
-  const handleLogout = () => {
-    // In a real app, this would call a logout API
-    router.push("/")
+  const handleLogout = async () => {
+    try {
+      await signOut(auth)
+      router.push("/")
+    } catch (error) {
+      console.error("Error signing out:", error)
+    }
   }
 
   return (
