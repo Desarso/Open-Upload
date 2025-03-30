@@ -89,4 +89,4 @@ if __name__ == "__main__":
     import uvicorn
     print(f"Starting server, allowing origins: {os.getenv('FRONTEND_URL')}")
     print(f"Using database: {os.getenv('DATABASE_URL', 'sqlite:///./database.db')}")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, proxy_headers=True, forwarded_allow_ips="*")
