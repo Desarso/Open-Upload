@@ -54,6 +54,7 @@ def generate_api_key():
 
 class ApiKeyBase(SQLModel):
     key: str = Field(default_factory=generate_api_key, index=True, unique=True)
+    name: str  # Added name field
     is_active: bool = Field(default=True)
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
     last_used_at: Optional[datetime.datetime] = Field(default=None)
@@ -71,6 +72,7 @@ class ApiKey(ApiKeyBase, table=True):
 class ApiKeyCreate(SQLModel):
     # Only need project_id when creating, user_id comes from auth
     project_id: int
+    name: str  # Added name field
 
 class ApiKeyRead(ApiKeyBase):
     id: int
@@ -116,7 +118,7 @@ class FileBase(SQLModel):
     user_firebase_uid: str = Field(foreign_key="user.firebase_uid", index=True)
 
 class File(FileBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[str] = Field(default=None, primary_key=True)  # Changed from int to str for UUID
     storage_path: str  # Path where file is stored
     # Relationships
     project: Project = Relationship(back_populates="files")
@@ -129,7 +131,7 @@ class FileCreate(SQLModel):
     project_id: int
 
 class FileRead(FileBase):
-    id: int
+    id: str  # Changed from int to str for UUID
     created_at: datetime.datetime
 
 # Update forward refs allows relationships to be defined using strings before the class is defined

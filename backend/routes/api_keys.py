@@ -27,7 +27,8 @@ async def create_api_key(
 
     new_key = ApiKey(
         project_id=key_data.project_id,
-        user_firebase_uid=current_user.firebase_uid
+        user_firebase_uid=current_user.firebase_uid,
+        name=key_data.name
     )
     session.add(new_key)
     session.commit()

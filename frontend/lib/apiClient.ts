@@ -16,6 +16,7 @@ export interface Project {
 export interface ApiKey {
   id: number;
   key: string;
+  name: string;
   is_active: boolean;
   created_at: string; // ISO date string
   last_used_at?: string | null; // ISO date string
@@ -160,7 +161,7 @@ export const getApiKeys = (token: string, projectId?: number): Promise<ApiKey[]>
   return fetchApi(endpoint, token, { method: 'GET' });
 };
 
-export const createApiKey = (token: string, apiKeyData: { project_id: number }): Promise<ApiKey> => {
+export const createApiKey = (token: string, apiKeyData: { project_id: number, name: string }): Promise<ApiKey> => {
   return fetchApi('/api-keys/', token, {
     method: 'POST',
     body: JSON.stringify(apiKeyData),
@@ -174,7 +175,7 @@ export const deleteApiKey = (token: string, apiKeyId: number): Promise<null> => 
 // --- File API Functions ---
 
 export interface FileInfo {
-  id: number;
+  id: string;
   filename: string;
   size: number;
   mime_type: string;
@@ -203,7 +204,7 @@ export const listFiles = (token: string, projectId: number): Promise<FileInfo[]>
   return fetchApi(`/frontend/files/list?project_id=${projectId}`, token, { method: 'GET' });
 };
 
-export const downloadFile = async (token: string, fileId: number): Promise<Blob> => {
+export const downloadFile = async (token: string, fileId: string): Promise<Blob> => {
   const url = `${API_BASE_URL}/files/${fileId}`;
   const response = await fetch(url);
   if (!response.ok) {

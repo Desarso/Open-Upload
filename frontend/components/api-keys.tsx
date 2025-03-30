@@ -85,20 +85,23 @@ export function ApiKeys({ projectId, initialApiKeys }: ApiKeysProps) {
     }
 
     try {
-      const newKeyData = await createApiKey(token, { project_id: projectIdNum });
+      const newKeyData = await createApiKey(token, { 
+        project_id: projectIdNum,
+        name: newKeyName
+      });
       setApiKeys((prev) => [...prev, newKeyData]); // Add the new key from API response
       setNewKeyName(""); // Reset input
       setIsDialogOpen(false); // Close dialog
 
-      // Show the new key immediately
+      // Don't show the key by default
       setVisibleKeys((prev) => ({
         ...prev,
-        [newKeyData.id]: true,
+        [newKeyData.id]: false,
       }));
 
       toast({
         title: "API key created",
-        description: "Your new API key has been created successfully.",
+        description: "Your new API key has been created. Click the eye icon to reveal it.",
       });
     } catch (err: any) {
       console.error("Failed to create API key:", err);
@@ -225,35 +228,35 @@ export function ApiKeys({ projectId, initialApiKeys }: ApiKeysProps) {
             {!isLoading && apiKeys.map((apiKey) => (
               <div key={apiKey.id} className="flex flex-col space-y-2 p-4 border rounded-lg">
                 <div className="flex justify-between items-center">
-                  {/* Display key ID or a generated name if needed */}
-                  <h3 className="font-medium">Key ID: {apiKey.id}</h3>
-                  <div className="flex space-x-1"> {/* Reduced space */}
+                  {/* Display key name instead of ID */}
+                  <h3 className="font-medium">{apiKey.name || `Key ${apiKey.id}`}</h3>
+                  <div className="flex space-x-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
-                      className="h-8 w-8"
                       onClick={() => toggleKeyVisibility(apiKey.id)}
-                      title={visibleKeys[apiKey.id] ? "Hide Key" : "Show Key"}
+                      title={visibleKeys[apiKey.id] ? "Hide API key" : "Show API key"}
                     >
-                      {visibleKeys[apiKey.id] ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                      {visibleKeys[apiKey.id] ? (
+                        <EyeOffIcon className="h-4 w-4" />
+                      ) : (
+                        <EyeIcon className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
-                      className="h-8 w-8"
                       onClick={() => copyToClipboard(apiKey.key)}
-                      title="Copy Key"
+                      title="Copy API key"
+                      disabled={!visibleKeys[apiKey.id]} // Disable copy if key is hidden
                     >
                       <CopyIcon className="h-4 w-4" />
                     </Button>
-                    {/* Remove Regenerate Button */}
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
                       onClick={() => handleDeleteKey(apiKey.id)}
-                      disabled={isLoading} // Disable while another action is in progress
-                      title="Delete Key"
+                      title="Delete API key"
                     >
                       <TrashIcon className="h-4 w-4" />
                     </Button>

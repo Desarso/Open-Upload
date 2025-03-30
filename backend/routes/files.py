@@ -8,6 +8,7 @@ import mimetypes
 from pathlib import Path
 import time
 from sqlalchemy import BigInteger
+import uuid
 
 from database import get_db
 from helpers.Firebase_helpers import role_based_access
@@ -93,9 +94,10 @@ async def upload_file(
         finally:
             file.file.close()
         
-        # Create file record
+        # Create file record with UUID
         mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
         db_file = File(
+            id=str(uuid.uuid4()),  # Generate UUID for file ID
             filename=file.filename,
             size=file_path.stat().st_size,
             mime_type=mime_type,
@@ -174,7 +176,7 @@ async def list_files(
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=True)
 async def delete_file(
-    file_id: int,
+    file_id: str,  # Changed from int to str
     user_project_key: tuple[User, Project, ApiKey] = Depends(get_api_key_user),
     session: Session = Depends(get_db)
 ):
@@ -256,14 +258,14 @@ async def upload_file_frontend(
     current_user = request.state.user
     
     project = session.get(Project, project_id)
-    if not project or project.user_firebase_uid != current_user.firebase_uid:
+    if not project or project.user_firebase_uid != current_user.uid:
         raise HTTPException(status_code=403, detail="Not authorized to upload to this project")
     
     # Check total storage before upload
     total_storage = session.query(
         func.coalesce(func.sum(File.size), 0).cast(BigInteger).label('total_storage')
     ).filter(
-        File.user_firebase_uid == current_user.firebase_uid
+        File.user_firebase_uid == current_user.uid
     ).scalar() or 0
 
     # Check if this upload would exceed the limit
@@ -292,12 +294,13 @@ async def upload_file_frontend(
     # Create file record
     mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
     db_file = File(
+        id=str(uuid.uuid4()),  # Generate UUID for file ID
         filename=file.filename,
         size=file_path.stat().st_size,
         mime_type=mime_type,
         storage_path=str(file_path),
         project_id=project.id,
-        user_firebase_uid=current_user.firebase_uid
+        user_firebase_uid=current_user.uid
     )
     
     session.add(db_file)
@@ -331,7 +334,7 @@ async def list_files_frontend(
 
 @router_frontend.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file_frontend(
-    file_id: int,
+    file_id: str,  # Changed from int to str
     request: Request,
     session: Session = Depends(get_db)
 ):
@@ -344,7 +347,7 @@ async def delete_file_frontend(
         raise HTTPException(status_code=404, detail="File not found")
     
     # Verify file belongs to user
-    if file.user_firebase_uid != current_user.firebase_uid:
+    if file.user_firebase_uid != current_user.uid:
         raise HTTPException(status_code=403, detail="Not authorized to delete this file")
     
     # Delete file from disk
@@ -362,7 +365,7 @@ async def delete_file_frontend(
 
 @router_public.get("/{file_id}", response_class=FileResponse)
 async def get_file_public(
-    file_id: int,
+    file_id: str,  # Changed from int to str
     session: Session = Depends(get_db)
 ):
     """Download a file (public endpoint, no authentication required)."""
