@@ -1,45 +1,44 @@
-# Open Upload
+# 🚀 Open Upload
 
-An open-source file uploader service, similar in concept to UploadThing, allowing users to manage projects, generate API keys, and upload files.
+An open-source file uploader service ☁️, similar in concept to UploadThing, allowing users to manage projects, generate API keys 🔑, and upload files 📁.
 
-## Features
+## ✨ Features
 
-*   **File Uploads:** Securely upload and manage files.
-*   **Project Management:** Organize uploads into different projects.
-*   **API Key Management:** Generate and manage API keys for programmatic access.
-*   **User Authentication:** Sign up, log in, and manage user profiles.
-*   **Usage Tracking:** Monitor file storage and bandwidth usage (implementation details TBC).
-*   **Dashboard:** User-friendly interface for managing projects, files, API keys, and settings.
-*   **(Potential) Billing:** Infrastructure for billing based on usage (implementation details TBC).
+*   📂 **File Uploads:** Securely upload and manage files.
+*   🏗️ **Project Management:** Organize uploads into different projects.
+*   🔑 **API Key Management:** Generate and manage API keys for programmatic access.
+*   👤 **User Authentication:** Sign up, log in, and manage user profiles.
+*   📊 **Usage Tracking:** Monitor file storage and bandwidth usage (implementation details TBC).
+*   🖥️ **Dashboard:** User-friendly interface for managing projects, files, API keys, and settings.
+*   💰 **(Potential) Billing:** Infrastructure for billing based on usage (implementation details TBC).
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-*   **Backend:**
+*   **🐍 Backend:**
     *   Python
     *   FastAPI
     *   SQLAlchemy (likely, based on `database.py`, `models.py`)
     *   Firebase Authentication
     *   Uvicorn (web server)
     *   uv (package management)
-*   **Frontend:**
+*   **⚛️ Frontend:**
     *   Next.js
     *   React
     *   TypeScript
     *   Tailwind CSS
     *   Shadcn UI
     *   pnpm (package management)
-    *   pnpm (package management)
 
-## Getting Started
+## 🚀 Getting Started
 
-### Prerequisites
+### ✅ Prerequisites
 
 *   Python (version specified in `.python-version`, likely 3.10+)
 *   Node.js (LTS version recommended)
 *   pnpm (`npm install -g pnpm`)
-*   Firebase Project and Service Account Credentials
+*   Firebase Project and Service Account Credentials 🔥
 
-### Installation & Setup
+### ⚙️ Installation & Setup
 
 1.  **Clone the repository:**
     ```bash
@@ -82,9 +81,9 @@ An open-source file uploader service, similar in concept to UploadThing, allowin
         pnpm dev
         ```
 
-4.  **Access the application:** Open your browser and navigate to `http://localhost:3000`.
+4.  **Access the application:** Open your browser 🌐 and navigate to `http://localhost:3000`.
 
-## Configuration
+## 🔧 Configuration
 
 Ensure the following environment variables or configuration files are set up correctly:
 
@@ -94,18 +93,18 @@ Ensure the following environment variables or configuration files are set up cor
     *   JWT Secret Key (if used for session management beyond Firebase)
 *   **Frontend:**
     *   `NEXT_PUBLIC_API_URL`: The URL of the running backend API.
-    *   Firebase Client SDK Configuration (`frontend/lib/firebase.ts`)
+    *   Firebase Client SDK Configuration (`frontend/lib/firebase.ts`) 🔥
 
-## License
+## 📜 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. 📄
 
-## Contributing
+## 🙌 Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions are welcome! 🎉 Please feel free to submit issues and pull requests.
 (Add more specific contribution guidelines if desired).
 
-## Screenshots
+## 📸 Screenshots
 
 Here are some glimpses of the application:
 
