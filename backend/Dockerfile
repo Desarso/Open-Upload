@@ -12,4 +12,4 @@ EXPOSE 8000
 
 
 # Run the application
-CMD ["uv", "run", "index.py"]%                                                                                                                                                                                                                                        
+CMD ["uv", "run", "index.py"]                                                                                                                                                                                                                                        
