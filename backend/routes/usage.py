@@ -70,8 +70,8 @@ async def get_dashboard_stats(
     else:
         change_percentage = 0 if current_requests == 0 else 100
     
-    # Storage limit (1GB for now, could be made dynamic based on user plan)
-    storage_limit = 1024 * 1024 * 1024  # 1GB in bytes
+    # Storage limit (50GB for now, could be made dynamic based on user plan)
+    storage_limit = 50 * 1024 * 1024 * 1024
     
     return DashboardStats(
         total_storage=storage_result.total_storage,
