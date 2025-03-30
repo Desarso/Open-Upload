@@ -8,8 +8,8 @@ from models import User, Project, ApiKey, ApiUsage, File
 
 load_dotenv()
 
-# Use environment variable or default to a file named 'database.db' in the backend directory
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
+# Use environment variable or default to a file named 'database.db' in the db directory
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./db/database.db")
 
 # The connect_args is needed only for SQLite to disable same-thread checking.
 # It's not needed for other databases.

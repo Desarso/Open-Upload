@@ -12,7 +12,7 @@ from models import User, Project, ApiKey, File, FileCreate, FileRead
 from auth import get_current_db_user, get_api_key_user
 
 # Create upload directory
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path("db/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Create routers
