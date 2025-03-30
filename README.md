@@ -1,4 +1,4 @@
-# Open Upload (Placeholder Name)
+# Open Upload
 
 An open-source file uploader service, similar in concept to UploadThing, allowing users to manage projects, generate API keys, and upload files.
 
