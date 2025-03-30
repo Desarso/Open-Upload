@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File as FastAPIFile, Form, Request
 from fastapi.responses import FileResponse
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from typing import List, Optional
 import shutil
 import datetime
 import mimetypes
 from pathlib import Path
 import time
+from sqlalchemy import BigInteger
 
 from database import get_db
 from helpers.Firebase_helpers import role_based_access
@@ -16,6 +17,9 @@ from auth import get_current_db_user, get_api_key_user
 # Create upload directory
 UPLOAD_DIR = Path("db/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Storage limit (50GB)
+STORAGE_LIMIT = 50 * 1024 * 1024 * 1024
 
 # Create routers
 router = APIRouter(prefix="/api/v1/files", tags=["Files API"])
@@ -59,6 +63,20 @@ async def upload_file(
     user, project, api_key = user_project_key
     
     try:
+        # Check total storage before upload
+        total_storage = session.query(
+            func.coalesce(func.sum(File.size), 0).cast(BigInteger).label('total_storage')
+        ).filter(
+            File.user_firebase_uid == user.firebase_uid
+        ).scalar() or 0
+
+        # Check if this upload would exceed the limit
+        if total_storage + file.size > STORAGE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Upload would exceed storage limit of {STORAGE_LIMIT / (1024**3):.1f}GB"
+            )
+
         # Create project directory if it doesn't exist
         project_dir = UPLOAD_DIR / str(project.id)
         project_dir.mkdir(exist_ok=True)
@@ -240,6 +258,20 @@ async def upload_file_frontend(
     project = session.get(Project, project_id)
     if not project or project.user_firebase_uid != current_user.firebase_uid:
         raise HTTPException(status_code=403, detail="Not authorized to upload to this project")
+    
+    # Check total storage before upload
+    total_storage = session.query(
+        func.coalesce(func.sum(File.size), 0).cast(BigInteger).label('total_storage')
+    ).filter(
+        File.user_firebase_uid == current_user.firebase_uid
+    ).scalar() or 0
+
+    # Check if this upload would exceed the limit
+    if total_storage + file.size > STORAGE_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Upload would exceed storage limit of {STORAGE_LIMIT / (1024**3):.1f}GB"
+        )
     
     # Create project directory if it doesn't exist
     project_dir = UPLOAD_DIR / str(project.id)
