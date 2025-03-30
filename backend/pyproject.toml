@@ -13,4 +13,6 @@ dependencies = [
     "alembic>=1.13.2",
     "psycopg2-binary>=2.9.9", # Required by Alembic even for SQLite
     "python-multipart>=0.0.20",
+    "python-jose[cryptography]>=3.4.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
