@@ -378,19 +378,13 @@ async def get_file_public(
     file_path = Path(file.storage_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
+
     
-    # Get file size
-    file_size = file_path.stat().st_size
-    
-    # Prepare headers
-    headers = {
-        "Content-Length": str(file_size)
-    }
 
     return FileResponse(
         path=file_path,
         filename=file.filename,
         media_type=file.mime_type,
+        stat_result=file_path.stat(),
         content_disposition_type='inline',
-        headers=headers  # Add headers here
     )
