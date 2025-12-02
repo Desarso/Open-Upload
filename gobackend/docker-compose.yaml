@@ -73,10 +73,10 @@ services:
       IMGPROXY_KEY: ${IMGPROXY_KEY}
       IMGPROXY_SALT: ${IMGPROXY_SALT}
 
-      # sensible defaults
-      IMGPROXY_AUTO_WEBP: ${IMGPROXY_AUTO_WEBP}
-      IMGPROXY_QUALITY: ${IMGPROXY_QUALITY}
-      IMGPROXY_MAX_SRC_RESOLUTION: ${IMGPROXY_MAX_SRC_RESOLUTION}
+      # sensible defaults (hardcoded, no env vars required)
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_QUALITY: "85"
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
 
     labels:
       - traefik.enable=true
