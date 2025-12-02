@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -30,7 +31,11 @@ func FirebaseAuthMiddleware() fiber.Handler {
 		}
 
 		token := parts[1]
-		user, err := VerifyIDToken(context.Background(), token)
+		// Use context with timeout to prevent hanging on slow Firebase calls
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		user, err := VerifyIDToken(ctx, token)
 		if err != nil {
 			log.Printf("auth: FirebaseAuthMiddleware VerifyIDToken error on %s %s: %v (token_len=%d)", c.Method(), c.Path(), err, len(token))
 			// Include the underlying error message in the response for easier debugging in dev.

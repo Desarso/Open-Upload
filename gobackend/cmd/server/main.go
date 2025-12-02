@@ -87,7 +87,8 @@ func main() {
 		}
 
 		token := parts[1]
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 		fbUser, err := auth.VerifyIDToken(ctx, token)
 		if err != nil {
 			log.Printf("auth: /me VerifyIDToken error: %v (token_len=%d)", err, len(token))

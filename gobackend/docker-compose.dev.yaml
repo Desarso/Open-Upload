@@ -1,0 +1,49 @@
+networks:
+  coolify:
+    external: true
+
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio-dev
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme-minio-secret}
+    volumes:
+      - ${MINIO_HOST_PATH:-./minio-data}:/data
+    # Port forwarding for development - accessible from localhost
+    ports:
+      - "9000:9000"  # MinIO API
+      - "9001:9001"  # MinIO Console
+    networks:
+      - coolify
+
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: imgproxy-dev
+    restart: unless-stopped
+    networks:
+      - coolify
+    # Port forwarding for development - accessible from localhost
+    ports:
+      - "8081:8080"  # imgproxy (using 8081 to avoid conflict with app on 8080)
+    environment:
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: ${IMGPROXY_S3_ENDPOINT:-localhost:9000}
+      IMGPROXY_S3_REGION: ${IMGPROXY_S3_REGION:-us-east-1}
+      # Use MinIO root credentials for imgproxy to access MinIO
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-changeme-minio-secret}
+      IMGPROXY_ALLOWED_SOURCES: ""
+
+      # imgproxy signing (optional, from .env)
+      IMGPROXY_KEY: ${IMGPROXY_KEY:-}
+      IMGPROXY_SALT: ${IMGPROXY_SALT:-}
+
+      # sensible defaults (hardcoded, no env vars required)
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_QUALITY: "85"
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+

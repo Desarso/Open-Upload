@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
@@ -21,10 +22,20 @@ type FirebaseUser struct {
 	Token string
 }
 
+type cachedToken struct {
+	user      *FirebaseUser
+	expiresAt time.Time
+}
+
 var (
 	fbOnce sync.Once
 	fbApp  *firebase.App
 	fbErr  error
+
+	// Token cache: map[token] -> cachedToken
+	tokenCache    = make(map[string]*cachedToken)
+	tokenCacheMu  sync.RWMutex
+	tokenCacheTTL = 5 * time.Minute // Cache tokens for 5 minutes (tokens typically last 1 hour)
 )
 
 // initFirebaseApp initializes the global Firebase app using a service account JSON.
@@ -54,7 +65,19 @@ func initFirebaseApp(ctx context.Context) (*firebase.App, error) {
 }
 
 // VerifyIDToken parses and verifies a Firebase ID token and returns a FirebaseUser.
+// Results are cached to avoid repeated Firebase API calls.
 func VerifyIDToken(ctx context.Context, idToken string) (*FirebaseUser, error) {
+	// Check cache first
+	tokenCacheMu.RLock()
+	cached, ok := tokenCache[idToken]
+	tokenCacheMu.RUnlock()
+
+	if ok && time.Now().Before(cached.expiresAt) {
+		// Return cached user
+		return cached.user, nil
+	}
+
+	// Cache miss or expired - verify with Firebase
 	app, err := initFirebaseApp(ctx)
 	if err != nil {
 		log.Printf("firebase: initFirebaseApp error: %v", err)
@@ -96,11 +119,30 @@ func VerifyIDToken(ctx context.Context, idToken string) (*FirebaseUser, error) {
 		}
 	}
 
-	return &FirebaseUser{
+	user := &FirebaseUser{
 		UID:   uid,
 		Email: email,
 		Roles: roles,
 		Name:  name,
 		Token: idToken,
-	}, nil
+	}
+
+	// Cache the result
+	tokenCacheMu.Lock()
+	tokenCache[idToken] = &cachedToken{
+		user:      user,
+		expiresAt: time.Now().Add(tokenCacheTTL),
+	}
+	// Clean up old entries periodically (simple cleanup - remove expired entries)
+	if len(tokenCache) > 1000 {
+		now := time.Now()
+		for k, v := range tokenCache {
+			if now.After(v.expiresAt) {
+				delete(tokenCache, k)
+			}
+		}
+	}
+	tokenCacheMu.Unlock()
+
+	return user, nil
 }
