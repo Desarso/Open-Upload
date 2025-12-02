@@ -15,8 +15,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_REGION: ${MINIO_REGION}
       MINIO_USE_SSL: ${MINIO_USE_SSL}
@@ -67,10 +67,6 @@ services:
       # Use AWS_ACCESS_KEY_ID and AWS_S3_SECRET_KEY from .env
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_S3_SECRET_KEY}
-
-      # Disable source URL checking - allow all sources
-      # This is safe when imgproxy is behind authentication/firewall
-      # Setting to empty string disables the check
       IMGPROXY_ALLOWED_SOURCES: ""
 
       # imgproxy signing (optional, from .env)
@@ -78,7 +74,7 @@ services:
       IMGPROXY_SALT: ${IMGPROXY_SALT}
 
       # sensible defaults
-      IMGPROXY_ENABLE_WEBP_DETECTION: ${IMGPROXY_ENABLE_WEBP_DETECTION}
+      IMGPROXY_AUTO_WEBP: ${IMGPROXY_ENABLE_WEBP_DETECTION}
       IMGPROXY_QUALITY: ${IMGPROXY_QUALITY}
       IMGPROXY_MAX_SRC_RESOLUTION: ${IMGPROXY_MAX_SRC_RESOLUTION}
 
