@@ -23,7 +23,7 @@ services:
       IMGPROXY_URL: "${IMGPROXY_URL:-http://imgproxy:8080}"
       STORAGE_PREFIX: "${STORAGE_PREFIX:-uploads}"
     volumes:
-      - ./firebase:/app/firebase:ro
+      - "${FIREBASE_HOST_PATH:-./firebase}:/app/firebase:ro"
       - db_data:/app/data
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
@@ -42,7 +42,7 @@ services:
       MINIO_ROOT_USER: "${MINIO_ACCESS_KEY:-minioadmin}"
       MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY:-changeme-minio-secret}"
     volumes:
-      - /mnt/media:/data
+      - "${MINIO_HOST_PATH:-/mnt/media}:/data"
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
     #   - "9000:9000"  # MinIO API
