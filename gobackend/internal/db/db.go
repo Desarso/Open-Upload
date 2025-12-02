@@ -43,10 +43,20 @@ func GetDB() (*sql.DB, error) {
 			}
 		}
 
-		dbConn, dbErr = sql.Open("sqlite", dsn)
+		// Add SQLite connection parameters for better concurrency
+		// _busy_timeout: wait up to 5 seconds for locks to be released
+		// _journal_mode=WAL: Write-Ahead Logging for better concurrency
+		dsnWithParams := dsn + "?_busy_timeout=5000&_journal_mode=WAL"
+
+		dbConn, dbErr = sql.Open("sqlite", dsnWithParams)
 		if dbErr != nil {
 			return
 		}
+
+		// Set connection pool settings
+		dbConn.SetMaxOpenConns(1) // SQLite works best with single connection
+		dbConn.SetMaxIdleConns(1)
+		dbConn.SetConnMaxLifetime(0) // Keep connections alive
 
 		if err := dbConn.Ping(); err != nil {
 			dbErr = err

@@ -32,13 +32,25 @@ func GetEnv(key, fallback string) string {
 }
 
 // GetMinioConfig reads MinIO/S3 config from env vars with sensible defaults.
+// Uses MINIO_ROOT_USER and MINIO_ROOT_PASSWORD (with fallback to MINIO_ACCESS_KEY/MINIO_SECRET_KEY for backward compatibility).
 func GetMinioConfig() MinioConfig {
 	useSSL := os.Getenv("MINIO_USE_SSL") == "true"
 
+	// Prefer MINIO_ROOT_USER/MINIO_ROOT_PASSWORD, fallback to MINIO_ACCESS_KEY/MINIO_SECRET_KEY for backward compatibility
+	accessKey := GetEnv("MINIO_ROOT_USER", "")
+	if accessKey == "" {
+		accessKey = GetEnv("MINIO_ACCESS_KEY", "minioadmin")
+	}
+
+	secretKey := GetEnv("MINIO_ROOT_PASSWORD", "")
+	if secretKey == "" {
+		secretKey = GetEnv("MINIO_SECRET_KEY", "changeme-minio-secret")
+	}
+
 	return MinioConfig{
 		Endpoint:      GetEnv("MINIO_ENDPOINT", "minio:9000"),
-		AccessKey:     GetEnv("MINIO_ACCESS_KEY", "minioadmin"),
-		SecretKey:     GetEnv("MINIO_SECRET_KEY", "changeme-minio-secret"),
+		AccessKey:     accessKey,
+		SecretKey:     secretKey,
 		Bucket:        GetEnv("MINIO_BUCKET", "openupload"),
 		UseSSL:        useSSL,
 		Region:        GetEnv("MINIO_REGION", "us-east-1"),
