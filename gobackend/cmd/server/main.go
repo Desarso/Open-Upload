@@ -1,0 +1,149 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/logger"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+
+	"github.com/gabriel/open_upload_gobackend/internal/auth"
+	"github.com/gabriel/open_upload_gobackend/internal/config"
+	"github.com/gabriel/open_upload_gobackend/internal/db"
+	"github.com/gabriel/open_upload_gobackend/internal/routes"
+)
+
+func main() {
+	// Load env vars from .env if present
+	config.LoadEnv()
+
+	appCfg := config.GetAppConfig()
+
+	// Initialize DB (connection + basic schema sanity check)
+	if _, err := db.GetDB(); err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	if err := db.Migrate(context.Background()); err != nil {
+		log.Fatalf("database migration check failed: %v", err)
+	}
+
+	// MinIO configuration & client
+	minioCfg := config.GetMinioConfig()
+	minioClient, err := config.NewMinioClient(minioCfg)
+	if err != nil {
+		log.Fatalf("failed to init MinIO client: %v", err)
+	}
+
+	if err := config.EnsureMinioBucket(context.Background(), minioClient, minioCfg); err != nil {
+		log.Fatalf("failed to ensure bucket %q: %v", minioCfg.Bucket, err)
+	}
+
+	// Fiber app
+	app := fiber.New(fiber.Config{
+		AppName:      "OpenUpload Go Backend",
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	})
+
+	app.Use(recover.New())
+	// CORS (mirror Python's FRONTEND_URL)
+	corsConfig := cors.Config{
+		AllowCredentials: true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Authorization", "Content-Type", "X-API-Key"},
+	}
+	if appCfg.FrontendURL != "" {
+		corsConfig.AllowOrigins = []string{appCfg.FrontendURL}
+	}
+	app.Use(cors.New(corsConfig))
+	app.Use(logger.New())
+
+	// Health check
+	app.Get("/health", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	// /me - current user profile from DB (create-on-first-request)
+	app.Get("/me", func(c fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			log.Printf("auth: /me missing Authorization header")
+			return fiber.NewError(http.StatusUnauthorized, "Authorization header is required")
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			log.Printf("auth: /me malformed Authorization header: %q", authHeader)
+			return fiber.NewError(http.StatusUnauthorized, "Authorization header must be Bearer token")
+		}
+
+		token := parts[1]
+		ctx := context.Background()
+		fbUser, err := auth.VerifyIDToken(ctx, token)
+		if err != nil {
+			log.Printf("auth: /me VerifyIDToken error: %v (token_len=%d)", err, len(token))
+			return fiber.NewError(http.StatusUnauthorized, fmt.Sprintf("Invalid Firebase ID token: %v", err))
+		}
+
+		// get-or-create DB user
+		dbUser, err := auth.GetOrCreateDBUser(ctx, fbUser)
+		if err != nil {
+			log.Printf("GetOrCreateDBUser error: %v", err)
+			return fiber.NewError(http.StatusInternalServerError, "Failed to load user profile")
+		}
+
+		return c.JSON(dbUser)
+	})
+
+	// Minimal OpenAPI spec for Swagger UI at /docs (frontend calls /openapi.json).
+	// This is a stub you can extend over time; it keeps the docs page working.
+	app.Get("/openapi.json", func(c fiber.Ctx) error {
+		spec := fiber.Map{
+			"openapi": "3.0.0",
+			"info": fiber.Map{
+				"title":       "OpenUpload API",
+				"description": "API for managing file uploads, projects, and API keys",
+				"version":     "1.0.0",
+			},
+			"paths": fiber.Map{}, // Intentionally minimal; can be filled out later.
+		}
+		return c.JSON(spec)
+	})
+
+	// API routes
+	api := app.Group("/api/v1")
+	files := api.Group("/files", auth.APIKeyMiddleware())
+	routes.RegisterFileRoutes(files, minioClient, minioCfg)
+
+	// Frontend-style routes (no /api/v1 prefix) to match existing frontend/apiClient.ts
+	projects := app.Group("/projects")
+	routes.RegisterProjectRoutes(projects)
+
+	apiKeys := app.Group("/api-keys")
+	routes.RegisterAPIKeyRoutes(apiKeys)
+
+	frontendAPIKeys := app.Group("/frontend/api-keys")
+	routes.RegisterFrontendAPIKeyRoutes(frontendAPIKeys)
+
+	usage := app.Group("/usage")
+	routes.RegisterUsageRoutes(usage)
+
+	// Frontend file routes (Firebase auth) and public file-by-id download
+	frontendFiles := app.Group("/frontend/files")
+	routes.RegisterFrontendFileRoutes(frontendFiles, minioClient, minioCfg)
+
+	publicFiles := app.Group("/files")
+	routes.RegisterPublicFileRoutes(publicFiles, minioClient, minioCfg)
+
+	log.Printf("Starting Go backend on :%s", appCfg.Port)
+
+	if err := app.Listen(":" + appCfg.Port); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("server error: %v", err)
+	}
+}

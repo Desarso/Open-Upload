@@ -19,10 +19,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 // import { useRouter } from "next/navigation"; // Remove router for now
 import { useAuth } from "@/context/AuthContext"; // Import useAuth
-import { createProject } from "@/lib/apiClient"; // Import API function
+import { createProject, type Project } from "@/lib/apiClient"; // Import API function
 import { toast } from "@/components/ui/use-toast"; // Import toast
 
-export function CreateProjectButton() {
+interface CreateProjectButtonProps {
+  onCreated?: (project: Project) => void;
+}
+
+export function CreateProjectButton({ onCreated }: CreateProjectButtonProps) {
   const { currentUser, getIdToken } = useAuth(); // Get auth context
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -51,15 +55,14 @@ export function CreateProjectButton() {
         description: description || undefined, // Send undefined if empty
         user_firebase_uid: currentUser.uid, // Pass the Firebase UID
       };
-      await createProject(token, projectData);
+      const created = await createProject(token, projectData);
 
       toast({ title: "Success", description: `Project "${name}" created successfully.` });
       setOpen(false); // Close dialog on success
       setName(""); // Reset fields
       setDescription("");
-      // TODO: Ideally, trigger a refresh of the project list on the dashboard page
-      // This might involve passing a callback function down or using global state.
-      // router.push("/dashboard/projects/new") // Remove redirect for now
+      // Notify parent so it can refresh the list without a full reload.
+      onCreated?.(created);
     } catch (err: any) {
       console.error("Failed to create project:", err);
       toast({ variant: "destructive", title: "Error", description: err.message || "Failed to create project." });

@@ -213,8 +213,14 @@ export const downloadFile = async (token: string, fileId: string): Promise<Blob>
   return response.blob();
 };
 
-export const deleteFile = (token: string, fileId: number): Promise<null> => {
+export const deleteFile = (token: string, fileId: string): Promise<null> => {
   return fetchApi(`/frontend/files/${fileId}`, token, { method: 'DELETE' });
+};
+
+export const getFileThumbnailUrl = (fileId: string): string => {
+  // Use public thumbnail endpoint - no auth required
+  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/files/${fileId}/thumbnail`;
 };
 
 // --- Usage API Functions ---

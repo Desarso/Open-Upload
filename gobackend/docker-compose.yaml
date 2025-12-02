@@ -1,0 +1,111 @@
+networks:
+  coolify:
+    external: true
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openupload-go-backend
+    restart: unless-stopped
+    environment:
+      PORT: "${PORT:-8080}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3000}"
+      DATABASE_URL: "${DATABASE_URL:-sqlite:///app/data/database.db}"
+      FIREBASE_CREDENTIALS_PATH: "${FIREBASE_CREDENTIALS_PATH:-./firebase/firebase_credentials.json}"
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-minio:9000}"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY:-changeme-minio-secret}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-openupload}"
+      MINIO_REGION: "${MINIO_REGION:-us-east-1}"
+      MINIO_USE_SSL: "${MINIO_USE_SSL:-false}"
+      IMGPROXY_URL: "${IMGPROXY_URL:-http://imgproxy:8080}"
+      STORAGE_PREFIX: "${STORAGE_PREFIX:-uploads}"
+    volumes:
+      - ./firebase:/app/firebase:ro
+      - db_data:/app/data
+    # Port forwarding: Uncomment when DEVELOPMENT=true
+    # ports:
+    #   - "${PORT:-8080}:8080"
+    depends_on:
+      - minio
+    networks:
+      - coolify
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ACCESS_KEY:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY:-changeme-minio-secret}"
+    volumes:
+      - /mnt/media:/data
+    # Port forwarding: Uncomment when DEVELOPMENT=true
+    # ports:
+    #   - "9000:9000"  # MinIO API
+    #   - "9001:9001"  # MinIO Console
+    networks:
+      - coolify
+
+  imgproxy:
+    image: darthsim/imgproxy:latest
+    container_name: imgproxy
+    restart: unless-stopped
+    networks:
+      - coolify
+
+    # Port forwarding: Uncomment when DEVELOPMENT=true
+    # ports:
+    #   - "8081:8080"  # imgproxy (using 8081 to avoid conflict with app on 8080)
+    environment:
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: "${IMGPROXY_S3_ENDPOINT:-http://minio:9000}"   # internal, not public
+      IMGPROXY_S3_REGION: "${IMGPROXY_S3_REGION:-us-east-1}"
+      # Use IMGPROXY_S3_ACCESS_KEY/IMGPROXY_S3_SECRET_KEY if set, otherwise fall back to MINIO credentials
+      AWS_ACCESS_KEY_ID: "${IMGPROXY_S3_ACCESS_KEY:-${MINIO_ACCESS_KEY:-minioadmin}}"
+      AWS_SECRET_ACCESS_KEY: "${IMGPROXY_S3_SECRET_KEY:-${MINIO_SECRET_KEY:-changeme-minio-secret}}"
+
+      # Disable source URL checking - allow all sources
+      # This is safe when imgproxy is behind authentication/firewall
+      # Setting to empty string disables the check
+      IMGPROXY_ALLOWED_SOURCES: ""
+
+      # imgproxy signing (optional, from .env)
+      IMGPROXY_KEY: "${IMGPROXY_KEY:-}"
+      IMGPROXY_SALT: "${IMGPROXY_SALT:-}"
+
+      # sensible defaults
+      IMGPROXY_ENABLE_WEBP_DETECTION: "${IMGPROXY_ENABLE_WEBP_DETECTION:-true}"
+      IMGPROXY_QUALITY: "${IMGPROXY_QUALITY:-85}"
+      IMGPROXY_MAX_SRC_RESOLUTION: "${IMGPROXY_MAX_SRC_RESOLUTION:-50}"
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # HTTP → HTTPS for public CDN host
+      - traefik.http.routers.imgproxy-http.entryPoints=http
+      - traefik.http.routers.imgproxy-http.rule=Host(`cdn.yourdomain.com`)
+      - traefik.http.routers.imgproxy-http.middlewares=redirect-to-https
+      - traefik.http.routers.imgproxy-http.service=imgproxy-svc
+
+      # HTTPS
+      - traefik.http.routers.imgproxy-https.entryPoints=https
+      - traefik.http.routers.imgproxy-https.rule=Host(`cdn.yourdomain.com`)
+      - traefik.http.routers.imgproxy-https.middlewares=gzip
+      - traefik.http.routers.imgproxy-https.tls=true
+      - traefik.http.routers.imgproxy-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.imgproxy-https.service=imgproxy-svc
+
+      # Long-lived cache for Cloudflare
+      - traefik.http.middlewares.cdnheaders.headers.customResponseHeaders.Cache-Control=public, max-age=31536000, immutable
+      - traefik.http.routers.imgproxy-https.middlewares=gzip,cdnheaders
+
+      - traefik.http.services.imgproxy-svc.loadbalancer.server.port=8080
+
+volumes:
+  db_data:
+    driver: local

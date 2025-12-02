@@ -21,9 +21,10 @@ interface FileWithStatus {
 
 interface UploaderProps {
   projectId: string
+  onUploadComplete?: () => void
 }
 
-export function Uploader({ projectId }: UploaderProps) {
+export function Uploader({ projectId, onUploadComplete }: UploaderProps) {
   const { getIdToken } = useAuth()
   const [files, setFiles] = useState<FileWithStatus[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -69,6 +70,9 @@ export function Uploader({ projectId }: UploaderProps) {
 
       // Update with success
       setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress: 100, status: "success" } : f)))
+
+      // Notify parent so it can refresh any dependent data (e.g., file list)
+      onUploadComplete?.()
 
       // Remove successful upload after 3 seconds
       setTimeout(() => {

@@ -18,6 +18,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [projectData, setProjectData] = useState<ProjectWithKeys | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filesRefreshKey, setFilesRefreshKey] = useState(0);
   const { id } = use(params);
   const projectId = parseInt(id, 10); // Ensure ID is a number
 
@@ -131,8 +132,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
           <TabsContent value="files" className="space-y-6">
             {/* Pass projectId as string */}
-            <Uploader projectId={id} />
-            <FileList projectId={id} />
+            <Uploader
+              projectId={id}
+              onUploadComplete={() => setFilesRefreshKey((prev) => prev + 1)}
+            />
+            <FileList projectId={id} refreshKey={filesRefreshKey} />
           </TabsContent>
 
           <TabsContent value="api">

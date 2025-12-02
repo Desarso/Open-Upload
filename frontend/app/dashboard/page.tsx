@@ -117,7 +117,7 @@ export default function DashboardPage() {
             </Alert>
           )}
           {userData && <p className="text-sm text-muted-foreground">Logged in as: {userData.email}</p>}
-          <CreateProjectButton />
+          <CreateProjectButton onCreated={handleRefresh} />
         </div>
 
          {/* Only show dashboard content if user data is loaded successfully */}

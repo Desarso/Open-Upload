@@ -40,6 +40,7 @@ export function ProjectList({ projects, isLoading, error, onProjectDeleted }: Pr
   const { getIdToken } = useAuth();
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [projectStats, setProjectStats] = useState<ProjectStatsMap>({});
+  const safeProjects = projects ?? [];
 
   // Fetch stats for each project
   useEffect(() => {
@@ -47,7 +48,7 @@ export function ProjectList({ projects, isLoading, error, onProjectDeleted }: Pr
       const token = await getIdToken();
       if (!token) return;
 
-      projects.forEach(async (project) => {
+      safeProjects.forEach(async (project) => {
         // Skip if already loading
         if (projectStats[project.id]?.isLoading) return;
 
@@ -138,7 +139,7 @@ export function ProjectList({ projects, isLoading, error, onProjectDeleted }: Pr
   }
 
   // No Projects State
-  if (projects.length === 0) {
+  if (safeProjects.length === 0) {
      return (
        <div>
         <h2 className="text-xl font-semibold mb-4">Your Projects</h2>
@@ -153,7 +154,7 @@ export function ProjectList({ projects, isLoading, error, onProjectDeleted }: Pr
     <div>
       <h2 className="text-xl font-semibold mb-4">Your Projects</h2>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project) => (
+        {safeProjects.map((project) => (
           <Card key={project.id}>
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
