@@ -700,6 +700,126 @@ func serveFileFromMinIO(c fiber.Ctx, ctx context.Context, client *minio.Client, 
 	return c.Send(body)
 }
 
+// serveImageSize is a helper function that serves an image at a specific size using imgproxy.
+// It loads the file from the database, validates it's an image, and proxies the request to imgproxy.
+func serveImageSize(c fiber.Ctx, cfg config.MinioConfig, client *minio.Client, fileID string, height int, sizeName string) error {
+	if fileID == "" {
+		return fiber.NewError(http.StatusBadRequest, "file_id is required")
+	}
+
+	conn, err := db.GetDB()
+	if err != nil {
+		return fiber.NewError(http.StatusInternalServerError, "database not available")
+	}
+
+	// Use a short timeout for DB query
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dbCancel()
+
+	var f db.File
+	if err := conn.QueryRowContext(dbCtx, `
+		SELECT id, filename, size, mime_type, created_at, project_id, user_firebase_uid, storage_path, content_hash
+		FROM file
+		WHERE id = ?
+	`, fileID).Scan(
+		&f.ID,
+		&f.Filename,
+		&f.Size,
+		&f.MimeType,
+		&f.CreatedAt,
+		&f.ProjectID,
+		&f.UserFirebaseUID,
+		&f.StoragePath,
+		&f.ContentHash,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return fiber.NewError(http.StatusNotFound, "File not found")
+		}
+		return fiber.NewError(http.StatusInternalServerError, "failed to load file")
+	}
+
+	// Only generate images for image files
+	if !strings.HasPrefix(f.MimeType, "image/") {
+		log.Printf("%s: skipping non-image file: id=%s, mime_type=%s, storage_path=%s", sizeName, f.ID, f.MimeType, f.StoragePath)
+		return fiber.NewError(http.StatusBadRequest, "Image sizes are only available for image files")
+	}
+
+	// If it's an S3 path, proxy image from imgproxy
+	if strings.HasPrefix(f.StoragePath, "s3://") {
+		key, err := extractKeyFromStoragePath(f.StoragePath, cfg.Bucket)
+		if err != nil {
+			log.Printf("%s: failed to extract key from storage path: %v", sizeName, err)
+			return err
+		}
+		log.Printf("%s: start: fileID=%s, mime_type=%s, storagePath=%s, bucket=%s, extracted key=%s, imgproxy_base=%s",
+			sizeName, f.ID, f.MimeType, f.StoragePath, cfg.Bucket, key, cfg.ImgproxyURL)
+		imageURL := buildImgproxyURLWithOptions(cfg, key, "fit", 0, height, "webp")
+		log.Printf("%s: requesting imgproxy URL=%s", sizeName, imageURL)
+
+		// Create a context tied to the request context with longer timeout
+		imgproxyCtx, imgproxyCancel := context.WithTimeout(c.Context(), 30*time.Second)
+		defer imgproxyCancel()
+
+		// Proxy request to imgproxy (internal service)
+		req, err := http.NewRequestWithContext(imgproxyCtx, "GET", imageURL, nil)
+		if err != nil {
+			log.Printf("%s proxy request error: %v", sizeName, err)
+			return fiber.NewError(http.StatusInternalServerError, "failed to create image request")
+		}
+
+		httpClient := &http.Client{
+			Timeout: 30 * time.Second,
+		}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Printf("%s proxy error: %v", sizeName, err)
+			return fiber.NewError(http.StatusServiceUnavailable, "Image service unavailable")
+		}
+		defer resp.Body.Close()
+
+		log.Printf("%s: imgproxy response status=%d", sizeName, resp.StatusCode)
+
+		// If imgproxy fails, log details and propagate an error
+		if resp.StatusCode != http.StatusOK {
+			bodyPreview, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+
+			log.Printf("%s: imgproxy error: status=%d, fileID=%s, key=%s, bucket=%s, body_preview=%q",
+				sizeName, resp.StatusCode, fileID, key, cfg.Bucket, string(bodyPreview))
+
+			if resp.StatusCode == http.StatusNotFound {
+				return fiber.NewError(http.StatusNotFound, "Image not found")
+			}
+
+			return fiber.NewError(http.StatusBadGateway, "Image service error")
+		}
+
+		// Set headers from imgproxy response
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "image/webp"
+		}
+		c.Set("Content-Type", contentType)
+		c.Set("Cache-Control", "public, max-age=3600")
+		c.Set("Content-Disposition", `inline; filename="`+sizeName+`_`+f.Filename+`"`)
+
+		// Read the entire body and send it - SendStream might have issues with http.Response.Body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("%s: failed to read imgproxy response body: %v", sizeName, err)
+			return fiber.NewError(http.StatusInternalServerError, "failed to read image")
+		}
+
+		return c.Send(body)
+	}
+
+	// Legacy local path: return regular file for now
+	if _, err := os.Stat(f.StoragePath); err == nil {
+		return c.SendFile(f.StoragePath)
+	}
+
+	return fiber.NewError(http.StatusNotFound, "File not found on storage")
+}
+
 // RegisterPublicFileRoutes registers /files/:file_id to serve downloads by DB ID.
 // Files are proxied from MinIO instead of redirecting, so the frontend never accesses MinIO directly.
 func RegisterPublicFileRoutes(router fiber.Router, client *minio.Client, cfg config.MinioConfig) {
@@ -763,124 +883,22 @@ func RegisterPublicFileRoutes(router fiber.Router, client *minio.Client, cfg con
 
 	// GET /files/:file_id/thumbnail - serve thumbnail using imgproxy
 	router.Get("/:file_id/thumbnail", func(c fiber.Ctx) error {
-		fileID := c.Params("file_id")
-		if fileID == "" {
-			return fiber.NewError(http.StatusBadRequest, "file_id is required")
-		}
+		return serveImageSize(c, cfg, client, c.Params("file_id"), 120, "thumbnail")
+	})
 
-		conn, err := db.GetDB()
-		if err != nil {
-			return fiber.NewError(http.StatusInternalServerError, "database not available")
-		}
+	// GET /files/:file_id/medium - serve medium-sized image using imgproxy
+	router.Get("/:file_id/medium", func(c fiber.Ctx) error {
+		return serveImageSize(c, cfg, client, c.Params("file_id"), 320, "medium")
+	})
 
-		// Use a short timeout for DB query
-		dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer dbCancel()
+	// GET /files/:file_id/preview - serve preview-sized image using imgproxy
+	router.Get("/:file_id/preview", func(c fiber.Ctx) error {
+		return serveImageSize(c, cfg, client, c.Params("file_id"), 720, "preview")
+	})
 
-		var f db.File
-		if err := conn.QueryRowContext(dbCtx, `
-			SELECT id, filename, size, mime_type, created_at, project_id, user_firebase_uid, storage_path, content_hash
-			FROM file
-			WHERE id = ?
-		`, fileID).Scan(
-			&f.ID,
-			&f.Filename,
-			&f.Size,
-			&f.MimeType,
-			&f.CreatedAt,
-			&f.ProjectID,
-			&f.UserFirebaseUID,
-			&f.StoragePath,
-			&f.ContentHash,
-		); err != nil {
-			if err == sql.ErrNoRows {
-				return fiber.NewError(http.StatusNotFound, "File not found")
-			}
-			return fiber.NewError(http.StatusInternalServerError, "failed to load file")
-		}
-
-		// Only generate thumbnails for images
-		if !strings.HasPrefix(f.MimeType, "image/") {
-			log.Printf("thumbnail: skipping non-image file: id=%s, mime_type=%s, storage_path=%s", f.ID, f.MimeType, f.StoragePath)
-			return fiber.NewError(http.StatusBadRequest, "Thumbnails are only available for image files")
-		}
-
-		// If it's an S3 path, proxy thumbnail from imgproxy
-		if strings.HasPrefix(f.StoragePath, "s3://") {
-			key, err := extractKeyFromStoragePath(f.StoragePath, cfg.Bucket)
-			if err != nil {
-				log.Printf("thumbnail: failed to extract key from storage path: %v", err)
-				return err
-			}
-			log.Printf("thumbnail: start: fileID=%s, mime_type=%s, storagePath=%s, bucket=%s, extracted key=%s, imgproxy_base=%s",
-				fileID, f.MimeType, f.StoragePath, cfg.Bucket, key, cfg.ImgproxyURL)
-			thumbnailURL := buildImgproxyURLWithOptions(cfg, key, "fit", 0, 120, "webp")
-			log.Printf("thumbnail: requesting imgproxy URL=%s", thumbnailURL)
-
-			// Create a context tied to the request context with longer timeout
-			imgproxyCtx, imgproxyCancel := context.WithTimeout(c.Context(), 30*time.Second)
-			defer imgproxyCancel()
-
-			// Proxy request to imgproxy (internal service)
-			req, err := http.NewRequestWithContext(imgproxyCtx, "GET", thumbnailURL, nil)
-			if err != nil {
-				log.Printf("thumbnail proxy request error: %v", err)
-				return fiber.NewError(http.StatusInternalServerError, "failed to create thumbnail request")
-			}
-
-			httpClient := &http.Client{
-				Timeout: 30 * time.Second,
-			}
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				log.Printf("thumbnail proxy error: %v", err)
-				return fiber.NewError(http.StatusServiceUnavailable, "Thumbnail service unavailable")
-			}
-			defer resp.Body.Close()
-
-			log.Printf("thumbnail: imgproxy response status=%d", resp.StatusCode)
-
-			// If imgproxy fails, log details and propagate an error so the frontend
-			// can gracefully fall back to showing the file icon instead of a broken
-			// full-size image that looks bad in the grid.
-			if resp.StatusCode != http.StatusOK {
-				bodyPreview, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-
-				log.Printf("thumbnail: imgproxy error: status=%d, fileID=%s, key=%s, bucket=%s, body_preview=%q",
-					resp.StatusCode, fileID, key, cfg.Bucket, string(bodyPreview))
-
-				if resp.StatusCode == http.StatusNotFound {
-					return fiber.NewError(http.StatusNotFound, "Thumbnail not found")
-				}
-
-				return fiber.NewError(http.StatusBadGateway, "Thumbnail service error")
-			}
-
-			// Set headers from imgproxy response
-			contentType := resp.Header.Get("Content-Type")
-			if contentType == "" {
-				contentType = "image/webp"
-			}
-			c.Set("Content-Type", contentType)
-			c.Set("Cache-Control", "public, max-age=3600")
-			c.Set("Content-Disposition", `inline; filename="thumbnail_`+f.Filename+`"`)
-
-			// Read the entire body and send it - SendStream might have issues with http.Response.Body
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Printf("thumbnail: failed to read imgproxy response body: %v", err)
-				return fiber.NewError(http.StatusInternalServerError, "failed to read thumbnail")
-			}
-
-			return c.Send(body)
-		}
-
-		// Legacy local path: return regular file for now
-		if _, err := os.Stat(f.StoragePath); err == nil {
-			return c.SendFile(f.StoragePath)
-		}
-
-		return fiber.NewError(http.StatusNotFound, "File not found on storage")
+	// GET /files/:file_id/full - serve full-sized (but bounded) image using imgproxy
+	router.Get("/:file_id/full", func(c fiber.Ctx) error {
+		return serveImageSize(c, cfg, client, c.Params("file_id"), 1080, "full")
 	})
 }
 
