@@ -3,13 +3,16 @@ package routes
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gabriel/open_upload_gobackend/internal/auth"
+	"github.com/gabriel/open_upload_gobackend/internal/config"
 	"github.com/gabriel/open_upload_gobackend/internal/db"
 	"github.com/gofiber/fiber/v3"
+	"github.com/minio/minio-go/v7"
 )
 
 type DashboardStats struct {
@@ -27,13 +30,24 @@ type UsageStats struct {
 	SuccessRate     float64 `json:"success_rate"`
 }
 
+type StorageStats struct {
+	DatabaseStorage int64               `json:"database_storage"`      // Storage tracked in DB
+	MinIOStorage    int64               `json:"minio_storage"`         // Actual storage in MinIO bucket
+	MinIOObjects    int64               `json:"minio_objects"`         // Number of objects in MinIO
+	StorageLimit    int64               `json:"storage_limit"`         // User storage limit
+	MinIOStats      *config.BucketStats `json:"minio_stats,omitempty"` // Detailed MinIO stats
+}
+
 // RegisterUsageRoutes registers /usage* routes that mirror backend/routes/usage.py
 // and are used by the frontend dashboard.
-func RegisterUsageRoutes(router fiber.Router) {
+func RegisterUsageRoutes(router fiber.Router, minioClient *minio.Client, minioCfg config.MinioConfig) {
 	router.Use(auth.FirebaseAuthMiddleware())
 	router.Use(auth.RequireRoles("whitelisted"))
 
 	router.Get("/dashboard-stats", getDashboardStats)
+	router.Get("/storage", func(c fiber.Ctx) error {
+		return getStorageStats(c, minioClient, minioCfg)
+	})
 	router.Get("/", getUsageStats)
 	router.Get("/details", getUsageDetails)
 }
@@ -117,6 +131,57 @@ func getDashboardStats(c fiber.Ctx) error {
 		TotalFiles:        totalFiles,
 		TotalAPIRequests:  currentRequests,
 		APIRequestsChange: change,
+	}
+
+	return c.JSON(stats)
+}
+
+func getStorageStats(c fiber.Ctx, minioClient *minio.Client, minioCfg config.MinioConfig) error {
+	user, err := auth.GetCurrentFirebaseUser(c)
+	if err != nil {
+		return fiber.NewError(http.StatusUnauthorized, "User not authenticated")
+	}
+
+	conn, err := db.GetDB()
+	if err != nil {
+		return fiber.NewError(http.StatusInternalServerError, "database not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get storage tracked in database
+	var databaseStorage int64 = 0
+	err = conn.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(size), 0)
+		FROM file
+		WHERE user_firebase_uid = ?
+	`, user.UID).Scan(&databaseStorage)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("Failed to query database storage: %v", err)
+		databaseStorage = 0
+	}
+
+	// Get MinIO bucket statistics
+	minioStats, err := config.GetBucketStats(ctx, minioClient, minioCfg.Bucket)
+	if err != nil {
+		log.Printf("Failed to get MinIO bucket stats: %v", err)
+		// Continue with database stats even if MinIO query fails
+		minioStats = config.BucketStats{
+			TotalSize:   0,
+			ObjectCount: 0,
+		}
+	}
+
+	// 50GB limit like Python
+	const storageLimit = 50 * 1024 * 1024 * 1024
+
+	stats := StorageStats{
+		DatabaseStorage: databaseStorage,
+		MinIOStorage:    minioStats.TotalSize,
+		MinIOObjects:    minioStats.ObjectCount,
+		StorageLimit:    storageLimit,
+		MinIOStats:      &minioStats,
 	}
 
 	return c.JSON(stats)

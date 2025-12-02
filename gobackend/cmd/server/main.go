@@ -156,7 +156,7 @@ func main() {
 	routes.RegisterFrontendAPIKeyRoutes(frontendAPIKeys)
 
 	usage := app.Group("/usage")
-	routes.RegisterUsageRoutes(usage)
+	routes.RegisterUsageRoutes(usage, minioClient, minioCfg)
 
 	// Frontend file routes (Firebase auth) and public file-by-id download
 	frontendFiles := app.Group("/frontend/files")

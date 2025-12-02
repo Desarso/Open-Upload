@@ -336,6 +336,50 @@
           }
         }
       },
+      "BucketStats": {
+        "type": "object",
+        "properties": {
+          "total_size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total size in bytes"
+          },
+          "object_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of objects"
+          }
+        }
+      },
+      "StorageStats": {
+        "type": "object",
+        "properties": {
+          "database_storage": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Storage tracked in database (user's files)"
+          },
+          "minio_storage": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Actual storage used in MinIO bucket (all users)"
+          },
+          "minio_objects": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of objects in MinIO bucket"
+          },
+          "storage_limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "User storage limit in bytes"
+          },
+          "minio_stats": {
+            "$ref": "#/components/schemas/BucketStats",
+            "description": "Detailed MinIO bucket statistics"
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -1252,6 +1296,51 @@
           },
           "401": {
             "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usage/storage": {
+      "get": {
+        "summary": "Get storage statistics",
+        "description": "Get detailed storage statistics including database-tracked storage and actual MinIO bucket usage",
+        "operationId": "getStorageStats",
+        "tags": ["Usage"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Storage statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
