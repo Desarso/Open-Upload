@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -101,19 +104,40 @@ func main() {
 		return c.JSON(dbUser)
 	})
 
-	// Minimal OpenAPI spec for Swagger UI at /docs (frontend calls /openapi.json).
-	// This is a stub you can extend over time; it keeps the docs page working.
+	// OpenAPI spec for Swagger UI at /docs (frontend calls /openapi.json).
 	app.Get("/openapi.json", func(c fiber.Ctx) error {
-		spec := fiber.Map{
-			"openapi": "3.0.0",
-			"info": fiber.Map{
-				"title":       "OpenUpload API",
-				"description": "API for managing file uploads, projects, and API keys",
-				"version":     "1.0.0",
-			},
-			"paths": fiber.Map{}, // Intentionally minimal; can be filled out later.
+		// Try to find openapi.json in common locations
+		// First try relative to current working directory, then relative to executable
+		possiblePaths := []string{
+			"openapi.json",
+			"../../openapi.json",
+			"../../../openapi.json",
 		}
-		return c.JSON(spec)
+
+		// Also try relative to the source file location (for development)
+		if _, filename, _, ok := runtime.Caller(0); ok {
+			sourceDir := filepath.Dir(filename)
+			possiblePaths = append(possiblePaths,
+				filepath.Join(sourceDir, "../../openapi.json"),
+			)
+		}
+
+		var specData []byte
+		var err error
+		for _, path := range possiblePaths {
+			specData, err = os.ReadFile(path)
+			if err == nil {
+				break
+			}
+		}
+
+		if err != nil {
+			log.Printf("Failed to read openapi.json from any path: %v", err)
+			return fiber.NewError(http.StatusInternalServerError, "Failed to load API specification")
+		}
+
+		c.Set("Content-Type", "application/json")
+		return c.Send(specData)
 	})
 
 	// API routes

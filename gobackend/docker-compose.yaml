@@ -24,7 +24,7 @@ services:
       STORAGE_PREFIX: ${STORAGE_PREFIX}
     volumes:
       - ${FIREBASE_HOST_PATH}:/app/firebase:ro
-      - ${DB_HOST_PATH}:/app/data
+      - ${DB_HOST_PATH}:/app/db
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
     #   - "${PORT}:8080"
@@ -36,6 +36,9 @@ services:
   minio:
     image: quay.io/minio/minio:latest
     container_name: minio
+    # For single volume: server /data --console-address ":9001"
+    # For multiple volumes: server /data1 /data2 /data3 /data4 --console-address ":9001"
+    # MinIO will automatically use all volumes. With 4+ volumes, it enables erasure coding.
     command: server /data --console-address ":9001"
     restart: unless-stopped
     environment:
@@ -43,6 +46,11 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ${MINIO_HOST_PATH}:/data
+      # To add more storage, uncomment and add additional volumes:
+      # - ${MINIO_HOST_PATH_2}:/data2
+      # - ${MINIO_HOST_PATH_3}:/data3
+      # - ${MINIO_HOST_PATH_4}:/data4
+      # Then update the command to: server /data /data2 /data3 /data4 --console-address ":9001"
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
     #   - "9000:9000"  # MinIO API

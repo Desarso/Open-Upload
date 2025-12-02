@@ -18,6 +18,7 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /app/server /app/server
+COPY --from=builder /app/openapi.json /app/openapi.json
 
 ENV PORT=8080
 
