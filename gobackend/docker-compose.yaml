@@ -24,7 +24,7 @@ services:
       STORAGE_PREFIX: ${STORAGE_PREFIX}
     volumes:
       - ${FIREBASE_HOST_PATH}:/app/firebase:ro
-      - db_data:/app/data
+      - ${DB_HOST_PATH}:/app/data
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
     #   - "${PORT}:8080"
@@ -101,7 +101,3 @@ services:
       - traefik.http.routers.imgproxy-https.middlewares=gzip,cdnheaders
 
       - traefik.http.services.imgproxy-svc.loadbalancer.server.port=8080
-
-volumes:
-  db_data:
-    driver: local

@@ -44,18 +44,20 @@ func GetDB() (*sql.DB, error) {
 		}
 
 		// Add SQLite connection parameters for better concurrency
-		// _busy_timeout: wait up to 5 seconds for locks to be released
+		// _busy_timeout: wait up to 10 seconds for locks to be released
 		// _journal_mode=WAL: Write-Ahead Logging for better concurrency
-		dsnWithParams := dsn + "?_busy_timeout=5000&_journal_mode=WAL"
+		// _foreign_keys=on: Enable foreign key constraints
+		dsnWithParams := dsn + "?_busy_timeout=10000&_journal_mode=WAL&_foreign_keys=on"
 
 		dbConn, dbErr = sql.Open("sqlite", dsnWithParams)
 		if dbErr != nil {
 			return
 		}
 
-		// Set connection pool settings
-		dbConn.SetMaxOpenConns(1) // SQLite works best with single connection
-		dbConn.SetMaxIdleConns(1)
+		// Set connection pool settings for SQLite with WAL mode
+		// WAL mode allows multiple readers and one writer concurrently
+		dbConn.SetMaxOpenConns(25) // Allow multiple connections for WAL mode
+		dbConn.SetMaxIdleConns(5)
 		dbConn.SetConnMaxLifetime(0) // Keep connections alive
 
 		if err := dbConn.Ping(); err != nil {
