@@ -87,7 +87,8 @@ func main() {
 		}
 
 		token := parts[1]
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		// Increased timeout to allow Firebase SDK to fetch public keys on first request
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		fbUser, err := auth.VerifyIDToken(ctx, token)
 		if err != nil {

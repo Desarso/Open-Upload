@@ -32,7 +32,9 @@ func FirebaseAuthMiddleware() fiber.Handler {
 
 		token := parts[1]
 		// Use context with timeout to prevent hanging on slow Firebase calls
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		// Increased to 10s to allow Firebase SDK to fetch public keys on first request
+		// Firebase SDK caches keys internally, so subsequent requests will be faster
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		user, err := VerifyIDToken(ctx, token)

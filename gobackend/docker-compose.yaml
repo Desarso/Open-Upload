@@ -9,6 +9,10 @@ services:
       dockerfile: Dockerfile
     container_name: openupload-go-backend
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
     environment:
       PORT: ${PORT}
       FRONTEND_URL: ${FRONTEND_URL}
