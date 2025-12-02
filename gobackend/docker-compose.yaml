@@ -65,8 +65,9 @@ services:
       IMGPROXY_S3_ENDPOINT: "${IMGPROXY_S3_ENDPOINT:-http://minio:9000}"   # internal, not public
       IMGPROXY_S3_REGION: "${IMGPROXY_S3_REGION:-us-east-1}"
       # Use IMGPROXY_S3_ACCESS_KEY/IMGPROXY_S3_SECRET_KEY if set, otherwise fall back to MINIO credentials
-      AWS_ACCESS_KEY_ID: "${IMGPROXY_S3_ACCESS_KEY:-${MINIO_ACCESS_KEY:-minioadmin}}"
-      AWS_SECRET_ACCESS_KEY: "${IMGPROXY_S3_SECRET_KEY:-${MINIO_SECRET_KEY:-changeme-minio-secret}}"
+      # Note: Using separate variables to avoid nested substitution issues
+      AWS_ACCESS_KEY_ID: "${IMGPROXY_S3_ACCESS_KEY:-minioadmin}"
+      AWS_SECRET_ACCESS_KEY: "${IMGPROXY_S3_SECRET_KEY:-changeme-minio-secret}"
 
       # Disable source URL checking - allow all sources
       # This is safe when imgproxy is behind authentication/firewall
