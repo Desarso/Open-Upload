@@ -27,8 +27,8 @@ services:
       IMGPROXY_URL: ${IMGPROXY_URL}
       STORAGE_PREFIX: ${STORAGE_PREFIX}
     volumes:
-      - /home/gabriel/Desktop/open_upload/firebase/:/app/firebase:ro
-      - /home/gabriel/Desktop/open_upload/:/app/db
+      - ${FIREBASE_HOST_PATH}:/app/firebase:ro
+      - ${DB_HOST_PATH}:/app/db
     # Port forwarding: Uncomment when DEVELOPMENT=true
     # ports:
     #   - "${PORT}:8080"

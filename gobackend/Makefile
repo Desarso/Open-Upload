@@ -26,11 +26,7 @@ run:
 
 # Start only the Docker services (MinIO + imgproxy) for local dev.
 # Use this together with `make dev`, which runs the Go binary directly.
-services:
-	@echo "Ensuring docker network 'coolify' exists..."
-	@docker network inspect coolify >/dev/null 2>&1 || docker network create coolify
-	@echo "Starting MinIO + imgproxy via docker compose (dev config)..."
-	@docker compose -f docker-compose.dev.yaml up -d minio imgproxy
+
 
 # Optional: run just the Go binary directly (no Docker app container)
 # This assumes MinIO and imgproxy are running in Docker containers
