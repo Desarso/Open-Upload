@@ -164,7 +164,14 @@ func main() {
 	frontendFiles := app.Group("/frontend/files")
 	routes.RegisterFrontendFileRoutes(frontendFiles, minioClient, minioCfg)
 
+	// Public file routes with permissive CORS (allow all origins)
 	publicFiles := app.Group("/files")
+	publicFiles.Use(cors.New(cors.Config{
+		AllowMethods:     []string{"GET", "OPTIONS"},
+		AllowHeaders:     []string{"*"},
+		AllowCredentials: false,
+		AllowOriginsFunc: func(origin string) bool { return true }, // Allow all origins
+	}))
 	routes.RegisterPublicFileRoutes(publicFiles, minioClient, minioCfg)
 
 	log.Printf("Starting Go backend on :%s", appCfg.Port)
