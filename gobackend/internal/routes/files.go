@@ -136,6 +136,15 @@ func RegisterFileRoutes(router fiber.Router, client *minio.Client, cfg config.Mi
 			return fiber.NewError(fiber.StatusBadRequest, "file is required")
 		}
 
+		conn, err := db.GetDB()
+		if err != nil {
+			trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
+			return fiber.NewError(http.StatusInternalServerError, "database not available")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		src, err := fileHeader.Open()
 		if err != nil {
 			trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
@@ -143,31 +152,88 @@ func RegisterFileRoutes(router fiber.Router, client *minio.Client, cfg config.Mi
 		}
 		defer src.Close()
 
-		// Construct object key: prefix/yyyy/mm/dd/filename
-		now := time.Now().UTC()
-		datePath := filepath.Join(
-			now.Format("2006"),
-			now.Format("01"),
-			now.Format("02"),
-		)
-		key := filepath.ToSlash(filepath.Join(cfg.StoragePrefix, datePath, fileHeader.Filename))
+		// Compute SHA256 hash of file content for deduplication
+		hash := sha256.New()
+		if _, err := io.Copy(hash, src); err != nil {
+			trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
+			return fiber.NewError(http.StatusInternalServerError, "failed to compute file hash")
+		}
+		contentHash := hex.EncodeToString(hash.Sum(nil))
 
-		opts := minio.PutObjectOptions{
-			ContentType: fileHeader.Header.Get("Content-Type"),
+		// Check if a file with this hash already exists
+		var existingStoragePath string
+		var existingSize int64
+		err = conn.QueryRowContext(ctx, `
+			SELECT storage_path, size
+			FROM file
+			WHERE content_hash = ?
+			LIMIT 1
+		`, contentHash).Scan(&existingStoragePath, &existingSize)
+
+		var storagePath string
+		var fileSize int64
+		var key string
+
+		if err == nil && existingStoragePath != "" {
+			// File with same hash exists, reuse the storage path
+			log.Printf("upload: reusing existing file with hash %s, storage_path=%s", contentHash, existingStoragePath)
+			storagePath = existingStoragePath
+			fileSize = existingSize
+			// Extract key from storage path
+			key = strings.TrimPrefix(storagePath, "s3://"+cfg.Bucket+"/")
+		} else {
+			// New file, upload to MinIO
+			// Reset file reader for upload
+			src.Close()
+			src, err = fileHeader.Open()
+			if err != nil {
+				trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
+				return fiber.NewError(http.StatusInternalServerError, "failed to reopen uploaded file")
+			}
+			defer src.Close()
+
+			// Construct object key: prefix/project_id/yyyy/mm/dd/filename
+			now := time.Now().UTC()
+			datePath := filepath.Join(
+				now.Format("2006"),
+				now.Format("01"),
+				now.Format("02"),
+			)
+			key = filepath.ToSlash(filepath.Join(cfg.StoragePrefix, strconv.FormatInt(apiCtx.Project.ID, 10), datePath, fileHeader.Filename))
+
+			opts := minio.PutObjectOptions{
+				ContentType: fileHeader.Header.Get("Content-Type"),
+			}
+
+			info, err := client.PutObject(
+				ctx,
+				cfg.Bucket,
+				key,
+				src,
+				fileHeader.Size,
+				opts,
+			)
+			if err != nil {
+				log.Printf("upload error: %v", err)
+				trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
+				return fiber.NewError(fiber.StatusInternalServerError, "failed to upload file")
+			}
+
+			storagePath = "s3://" + cfg.Bucket + "/" + info.Key
+			fileSize = info.Size
+			key = info.Key
 		}
 
-		info, err := client.PutObject(
-			context.Background(),
-			cfg.Bucket,
-			key,
-			src,
-			fileHeader.Size,
-			opts,
-		)
-		if err != nil {
-			log.Printf("upload error: %v", err)
+		// Insert DB record
+		nowStr := time.Now().UTC()
+		id := uuid.NewString()
+		if _, err := conn.ExecContext(ctx, `
+				INSERT INTO file (id, filename, size, mime_type, created_at, project_id, user_firebase_uid, storage_path, content_hash)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, id, fileHeader.Filename, fileSize, defaultContentType(fileHeader.Header.Get("Content-Type")), nowStr, apiCtx.Project.ID, apiCtx.User.FirebaseUID, storagePath, contentHash); err != nil {
+			log.Printf("db insert file error: %v", err)
 			trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusInternalServerError, start, apiCtx)
-			return fiber.NewError(fiber.StatusInternalServerError, "failed to upload file")
+			return fiber.NewError(http.StatusInternalServerError, "failed to save file record")
 		}
 
 		imgproxyURL := buildImgproxyURL(cfg, key)
@@ -175,10 +241,10 @@ func RegisterFileRoutes(router fiber.Router, client *minio.Client, cfg config.Mi
 		trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusCreated, start, apiCtx)
 
 		return c.Status(fiber.StatusCreated).JSON(uploadResponse{
-			Key:         info.Key,
-			Bucket:      info.Bucket,
-			Size:        info.Size,
-			ContentType: opts.ContentType,
+			Key:         key,
+			Bucket:      cfg.Bucket,
+			Size:        fileSize,
+			ContentType: defaultContentType(fileHeader.Header.Get("Content-Type")),
 			ImgproxyURL: imgproxyURL,
 		})
 	})

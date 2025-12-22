@@ -209,8 +209,8 @@ func getUsageStats(c fiber.Ctx) error {
 		SELECT
 			DATE(timestamp) AS date,
 			COUNT(id) AS api_calls,
-			AVG(response_time) AS avg_response_time,
-			(CAST(SUM(CASE WHEN status_code < 400 THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / COUNT(id)) AS success_rate
+			COALESCE(AVG(response_time), 0.0) AS avg_response_time,
+			COALESCE((CAST(SUM(CASE WHEN status_code < 400 THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / NULLIF(COUNT(id), 0)), 0.0) AS success_rate
 		FROM apiusage
 		WHERE user_firebase_uid = ?
 	`
