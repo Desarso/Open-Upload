@@ -27,10 +27,12 @@ import (
 )
 
 type uploadResponse struct {
+	ID          string `json:"id"`
 	Key         string `json:"key"`
 	Bucket      string `json:"bucket"`
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
+	URL         string `json:"url"`
 	ImgproxyURL string `json:"imgproxy_url"`
 }
 
@@ -238,13 +240,18 @@ func RegisterFileRoutes(router fiber.Router, client *minio.Client, cfg config.Mi
 
 		imgproxyURL := buildImgproxyURL(cfg, key)
 
+		// Build public URL using request scheme and host
+		publicURL := c.Scheme() + "://" + c.Host() + "/files/" + id
+
 		trackAPIUsage(context.Background(), "/api/v1/files/upload", http.StatusCreated, start, apiCtx)
 
 		return c.Status(fiber.StatusCreated).JSON(uploadResponse{
+			ID:          id,
 			Key:         key,
 			Bucket:      cfg.Bucket,
 			Size:        fileSize,
 			ContentType: defaultContentType(fileHeader.Header.Get("Content-Type")),
+			URL:         publicURL,
 			ImgproxyURL: imgproxyURL,
 		})
 	})
