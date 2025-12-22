@@ -728,12 +728,21 @@ func extractKeyFromStoragePath(storagePath string, expectedBucket string) (strin
 
 // serveFileFromMinIO is a helper function to serve a file directly from MinIO
 func serveFileFromMinIO(c fiber.Ctx, ctx context.Context, client *minio.Client, cfg config.MinioConfig, f db.File, key string) error {
-	log.Printf("serveFileFromMinIO: bucket=%s, key=%s", cfg.Bucket, key)
+	// Ensure CORS headers are set even if errors occur
+	c.Set("Access-Control-Allow-Origin", "*")
+	c.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	c.Set("Access-Control-Allow-Headers", "*")
 
-	// Get object from MinIO - use request context to ensure it stays valid for streaming
-	obj, err := client.GetObject(ctx, cfg.Bucket, key, minio.GetObjectOptions{})
+	log.Printf("serveFileFromMinIO: bucket=%s, key=%s, file_id=%s", cfg.Bucket, key, f.ID)
+
+	// Create a context with longer timeout for MinIO operations (30 seconds)
+	minioCtx, minioCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer minioCancel()
+
+	// Get object from MinIO
+	obj, err := client.GetObject(minioCtx, cfg.Bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		log.Printf("get object error: %v", err)
+		log.Printf("serveFileFromMinIO: GetObject error: %v, bucket=%s, key=%s", err, cfg.Bucket, key)
 		return fiber.NewError(http.StatusInternalServerError, "failed to fetch file from storage")
 	}
 	defer obj.Close()
@@ -741,7 +750,7 @@ func serveFileFromMinIO(c fiber.Ctx, ctx context.Context, client *minio.Client, 
 	// Get object info for content type
 	objInfo, err := obj.Stat()
 	if err != nil {
-		log.Printf("stat object error: %v, using DB metadata", err)
+		log.Printf("serveFileFromMinIO: Stat error: %v, using DB metadata, bucket=%s, key=%s", err, cfg.Bucket, key)
 		// Continue anyway - we can use file metadata from DB
 	}
 
@@ -761,16 +770,18 @@ func serveFileFromMinIO(c fiber.Ctx, ctx context.Context, client *minio.Client, 
 	}
 	c.Set("Cache-Control", "public, max-age=3600")
 
-	log.Printf("serveFileFromMinIO: streaming file, contentType=%s, size=%d", contentType, f.Size)
+	log.Printf("serveFileFromMinIO: streaming file, contentType=%s, size=%d, bucket=%s, key=%s", contentType, f.Size, cfg.Bucket, key)
 
-	// Read the entire object and send it - SendStream might have issues with MinIO object streams
-	body, err := io.ReadAll(obj)
+	// Stream the file directly instead of reading into memory
+	// This is more efficient and handles large files better
+	_, err = io.Copy(c.Response().BodyWriter(), obj)
 	if err != nil {
-		log.Printf("serveFileFromMinIO: failed to read object: %v", err)
-		return fiber.NewError(http.StatusInternalServerError, "failed to read file from storage")
+		log.Printf("serveFileFromMinIO: Copy error: %v, bucket=%s, key=%s", err, cfg.Bucket, key)
+		return fiber.NewError(http.StatusInternalServerError, "failed to stream file from storage")
 	}
 
-	return c.Send(body)
+	log.Printf("serveFileFromMinIO: successfully streamed file, bucket=%s, key=%s", cfg.Bucket, key)
+	return nil
 }
 
 // serveImageSize is a helper function that serves an image at a specific size using imgproxy.
@@ -898,13 +909,26 @@ func serveImageSize(c fiber.Ctx, cfg config.MinioConfig, client *minio.Client, f
 func RegisterPublicFileRoutes(router fiber.Router, client *minio.Client, cfg config.MinioConfig) {
 	// GET /files/:file_id - serve file (proxied from MinIO)
 	router.Get("/:file_id", func(c fiber.Ctx) error {
+		// Set CORS headers explicitly for all responses (including errors)
+		c.Set("Access-Control-Allow-Origin", "*")
+		c.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		c.Set("Access-Control-Allow-Headers", "*")
+
+		if client == nil {
+			log.Printf("public file: MinIO client is nil")
+			return fiber.NewError(http.StatusInternalServerError, "storage service unavailable")
+		}
 		fileID := c.Params("file_id")
 		if fileID == "" {
+			log.Printf("public file: empty file_id")
 			return fiber.NewError(http.StatusBadRequest, "file_id is required")
 		}
 
+		log.Printf("public file: request for file_id=%s", fileID)
+
 		conn, err := db.GetDB()
 		if err != nil {
+			log.Printf("public file: database connection error: %v", err)
 			return fiber.NewError(http.StatusInternalServerError, "database not available")
 		}
 
@@ -929,28 +953,39 @@ func RegisterPublicFileRoutes(router fiber.Router, client *minio.Client, cfg con
 			&f.ContentHash,
 		); err != nil {
 			if err == sql.ErrNoRows {
+				log.Printf("public file: file not found in database: file_id=%s", fileID)
 				return fiber.NewError(http.StatusNotFound, "File not found")
 			}
+			log.Printf("public file: database query error: %v, file_id=%s", err, fileID)
 			return fiber.NewError(http.StatusInternalServerError, "failed to load file")
 		}
+
+		log.Printf("public file: loaded file from DB: id=%s, storage_path=%s", f.ID, f.StoragePath)
 
 		// If it's an S3 path, proxy from MinIO
 		// Use request context so it stays valid for the entire stream duration
 		if strings.HasPrefix(f.StoragePath, "s3://") {
 			key, err := extractKeyFromStoragePath(f.StoragePath, cfg.Bucket)
 			if err != nil {
-				log.Printf("failed to extract key from storage path: %v", err)
+				log.Printf("public file: failed to extract key from storage path: %v, storage_path=%s", err, f.StoragePath)
+				return fiber.NewError(http.StatusInternalServerError, "invalid storage path")
+			}
+			log.Printf("public file: serving from MinIO: storage_path=%s, extracted_key=%s", f.StoragePath, key)
+			if err := serveFileFromMinIO(c, context.Background(), client, cfg, f, key); err != nil {
+				log.Printf("public file: serveFileFromMinIO error: %v, file_id=%s, key=%s", err, fileID, key)
 				return err
 			}
-			log.Printf("serving file: storage_path=%s, extracted_key=%s", f.StoragePath, key)
-			return serveFileFromMinIO(c, c.Context(), client, cfg, f, key)
+			return nil
 		}
 
 		// Legacy local path: best-effort send file if it exists
+		log.Printf("public file: checking legacy local path: %s", f.StoragePath)
 		if _, err := os.Stat(f.StoragePath); err == nil {
+			log.Printf("public file: serving from local path: %s", f.StoragePath)
 			return c.SendFile(f.StoragePath)
 		}
 
+		log.Printf("public file: file not found on storage: storage_path=%s", f.StoragePath)
 		return fiber.NewError(http.StatusNotFound, "File not found on storage")
 	})
 

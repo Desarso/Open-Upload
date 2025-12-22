@@ -55,7 +55,10 @@ func main() {
 	})
 
 	app.Use(recover.New())
-	// CORS (mirror Python's FRONTEND_URL)
+	app.Use(logger.New())
+
+	// CORS for authenticated routes (mirror Python's FRONTEND_URL)
+	// Note: Public file routes have their own permissive CORS below
 	corsConfig := cors.Config{
 		AllowCredentials: true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -65,7 +68,6 @@ func main() {
 		corsConfig.AllowOrigins = []string{appCfg.FrontendURL}
 	}
 	app.Use(cors.New(corsConfig))
-	app.Use(logger.New())
 
 	// Health check
 	app.Get("/health", func(c fiber.Ctx) error {
