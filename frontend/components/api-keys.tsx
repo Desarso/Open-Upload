@@ -294,7 +294,7 @@ export function ApiKeys({ projectId, initialApiKeys }: ApiKeysProps) {
             <div>
               <h3 className="font-medium mb-2">Upload a file</h3>
               <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{`curl -X POST ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/upload \\
+                <code>{`curl -X POST ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/files/upload \\
   -H "X-API-Key: YOUR_API_KEY" \\
   -F "file=@/path/to/file.jpg"`}</code>
               </pre>
@@ -303,25 +303,84 @@ export function ApiKeys({ projectId, initialApiKeys }: ApiKeysProps) {
             <div>
               <h3 className="font-medium mb-2">List files</h3>
               <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/list \\
+                <code>{`curl -X GET "${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/files/list?prefix=uploads/1" \\
   -H "X-API-Key: YOUR_API_KEY"`}</code>
               </pre>
+              <p className="text-sm text-muted-foreground mt-1">Optional: Add <code>?prefix=uploads/PROJECT_ID</code> to filter by project</p>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">Generate transform URL</h3>
+              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                <code>{`curl -X GET "${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/files/transform-url?key=FILE_KEY&w=800&h=600&format=webp" \\
+  -H "X-API-Key: YOUR_API_KEY"`}</code>
+              </pre>
+              <p className="text-sm text-muted-foreground mt-1">Generate imgproxy URLs for image transformations. Use <code>preset</code> (thumbnail, medium, preview, full) or <code>w</code>/<code>h</code> for custom dimensions.</p>
             </div>
 
             <div>
               <h3 className="font-medium mb-2">Get a file</h3>
               <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID \\
+                <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/files/FILE_KEY \\
   -H "X-API-Key: YOUR_API_KEY"`}</code>
               </pre>
+              <p className="text-sm text-muted-foreground mt-1">Returns a redirect to a presigned download URL (valid for 15 minutes). Use the file key from upload/list responses.</p>
             </div>
 
             <div>
               <h3 className="font-medium mb-2">Delete a file</h3>
               <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{`curl -X DELETE ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID \\
+                <code>{`curl -X DELETE ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/files/FILE_KEY \\
   -H "X-API-Key: YOUR_API_KEY"`}</code>
               </pre>
+              <p className="text-sm text-muted-foreground mt-1">Use the file key from upload/list responses.</p>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h3 className="font-semibold mb-3">Public File Endpoints (No API Key Required)</h3>
+              <p className="text-sm text-muted-foreground mb-4">These endpoints use the file ID from the database and work for images only.</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Get file by ID</h4>
+                  <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID`}</code>
+                  </pre>
+                  <p className="text-sm text-muted-foreground mt-1">Download the original file. Use the file ID from upload responses.</p>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Get thumbnail (120px height)</h4>
+                  <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID/thumbnail`}</code>
+                  </pre>
+                  <p className="text-sm text-muted-foreground mt-1">Returns a WebP thumbnail image (120px height, aspect ratio preserved).</p>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Get medium size (320px height)</h4>
+                  <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID/medium`}</code>
+                  </pre>
+                  <p className="text-sm text-muted-foreground mt-1">Returns a WebP image at medium size (320px height, aspect ratio preserved).</p>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Get preview size (720px height)</h4>
+                  <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID/preview`}</code>
+                  </pre>
+                  <p className="text-sm text-muted-foreground mt-1">Returns a WebP image at preview size (720px height, aspect ratio preserved).</p>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">Get full size (1080px height)</h4>
+                  <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`curl -X GET ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/files/FILE_ID/full`}</code>
+                  </pre>
+                  <p className="text-sm text-muted-foreground mt-1">Returns a WebP image at full size (1080px height, aspect ratio preserved).</p>
+                </div>
+              </div>
             </div>
 
             <div className="text-center mt-6">
