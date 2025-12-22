@@ -41,13 +41,16 @@ services:
 # Optional: run just the Go binary directly (no Docker app container)
 # This assumes MinIO and imgproxy are running in Docker containers
 # and accessible via localhost with port mappings (see `make services`).
-dev: build
-	@echo "Running Go backend binary (using environment from .env if present)..."
+dev:
+	@echo "Running Go backend with Air (using environment from .env if present)..."
 	@echo "Note: Ensure MinIO (localhost:9000) and imgproxy (localhost:8081) containers are running"
 	@echo "Start them with: make services"
 	@MINIO_ENDPOINT=localhost:9000 \
 	 IMGPROXY_URL=http://localhost:8081 \
 	 DATABASE_URL=$${DATABASE_URL:-sqlite:///./db/database.db} \
-	 ./open_upload_gobackend
+	 air
+
+
+
 
 
