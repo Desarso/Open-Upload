@@ -96,13 +96,13 @@ services:
 
       # HTTP → HTTPS for public CDN host
       - traefik.http.routers.imgproxy-http.entryPoints=http
-      - traefik.http.routers.imgproxy-http.rule=Host(`cdn.yourdomain.com`)
+      - traefik.http.routers.imgproxy-http.rule=Host(`whagons-cdn.whagons.com`)
       - traefik.http.routers.imgproxy-http.middlewares=redirect-to-https
       - traefik.http.routers.imgproxy-http.service=imgproxy-svc
 
       # HTTPS
       - traefik.http.routers.imgproxy-https.entryPoints=https
-      - traefik.http.routers.imgproxy-https.rule=Host(`cdn.yourdomain.com`)
+      - traefik.http.routers.imgproxy-https.rule=Host(`whagons-cdn.whagons.com`)
       - traefik.http.routers.imgproxy-https.middlewares=gzip
       - traefik.http.routers.imgproxy-https.tls=true
       - traefik.http.routers.imgproxy-https.tls.certresolver=letsencrypt
